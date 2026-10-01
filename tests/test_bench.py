@@ -36,3 +36,13 @@ def test_cli_vllm_config_and_whatif(capsys):
     assert "best k" in capsys.readouterr().out
     assert main(["vllm-config", "preset", "--preset", "eagle3-qwen3-8b"]) == 0
     assert "eagle3" in capsys.readouterr().out
+
+
+def test_report_k_falls_back_and_synthetic_only(target):
+    cfg = BenchConfig(k_max=4, ks=(1, 2, 4), batch_sizes=(1,), prompts_per_workload=1, report_k=3)
+    drafters = build_drafters(target, ("ngram",), log=lambda *a: None)
+    workloads = [WORKLOADS["synthetic-repeat"]]
+    report = analyse(run_acceptance(target, drafters, workloads, cfg, log=lambda *a: None), drafters, workloads, cfg)
+    assert report["config"]["report_k"] == 2
+    assert report["config"]["best_k_category"] == "all"
+    assert report["best_k"]["ngram"][0]["k"] in (1, 2, 4)

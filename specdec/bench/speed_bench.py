@@ -15,6 +15,7 @@ draft length, and how much do synthetic prompts overestimate the gain.
 
 from __future__ import annotations
 
+import csv
 import json
 import time
 from dataclasses import dataclass, field
@@ -161,7 +162,11 @@ def analyse(
     wnames = [w.name for w in workloads]
     dnames = [bd.name for bd in drafters]
     categories = sorted({WORKLOADS[w].category for w in wnames if w in WORKLOADS})
-    k_ref, b_lo, b_hi = cfg.report_k, cfg.batch_sizes[0], cfg.batch_sizes[-1]
+    b_lo, b_hi = cfg.batch_sizes[0], cfg.batch_sizes[-1]
+    # Report at the requested k, or the closest swept k below it.
+    k_ref = max([k for k in cfg.ks if k <= cfg.report_k] or [min(cfg.ks)])
+    # Pick best k on realistic workloads when there are any (that is what you deploy for).
+    best_cat = "realistic" if "realistic" in categories else None
 
     acceptance = {
         w: {d: select(workload=w, drafter=d, k=k_ref, batch=b_lo)[0]["acceptance_length"] for d in dnames}
@@ -185,14 +190,18 @@ def analyse(
     for d in dnames:
         best_k[d] = []
         for b in cfg.batch_sizes:
-            scored = {k: mean(r["speedup"] for r in select(category="realistic", drafter=d, k=k, batch=b))
-                      for k in cfg.ks}
+            scored = {
+                k: mean(r["speedup"] for r in select(drafter=d, k=k, batch=b)
+                        if best_cat is None or r["category"] == best_cat)
+                for k in cfg.ks
+            }
             k_best = max(scored, key=scored.get)
             best_k[d].append({"batch": b, "k": k_best, "speedup": scored[k_best]})
     return {
         "config": {
             "ks": list(cfg.ks), "batch_sizes": list(cfg.batch_sizes), "k_max": cfg.k_max,
-            "report_k": k_ref, "prompts_per_workload": cfg.prompts_per_workload,
+            "report_k": k_ref, "best_k_category": best_cat or "all",
+            "prompts_per_workload": cfg.prompts_per_workload,
             "cost_model": cm.describe(),
         },
         "acceptance_length": acceptance,
@@ -235,7 +244,7 @@ def to_markdown(report: dict) -> str:
             cells += [f"{v['acceptance_length']:.2f}", f"{v[f'speedup_b{bs[0]}']:.2f}x", f"{v[f'speedup_b{bs[-1]}']:.2f}x"]
         lines.append(f"| {d} | " + " | ".join(cells) + " |")
 
-    lines += ["", "## Best draft length per batch size (realistic workloads)", ""]
+    lines += ["", f"## Best draft length per batch size ({cfg.get('best_k_category', 'realistic')} workloads)", ""]
     lines.append("| drafter | " + " | ".join(f"B={b}" for b in bs) + " |")
     lines.append("|---" * (len(bs) + 1) + "|")
     for d, per_b in report["best_k"].items():
@@ -264,9 +273,15 @@ def run(
         import os
 
         os.makedirs(out_dir, exist_ok=True)
+        summary = {k: v for k, v in report.items() if k != "rows"}
         with open(os.path.join(out_dir, "speed_bench.json"), "w") as f:
-            json.dump(report, f, indent=1)
+            json.dump(summary, f, indent=1)
+        with open(os.path.join(out_dir, "speed_bench_rows.csv"), "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(report["rows"][0]))
+            writer.writeheader()
+            for row in report["rows"]:
+                writer.writerow({k: round(v, 4) if isinstance(v, float) else v for k, v in row.items()})
         with open(os.path.join(out_dir, "speed_bench.md"), "w") as f:
             f.write(to_markdown(report))
-        log(f"wrote {out_dir}/speed_bench.json and speed_bench.md")
+        log(f"wrote {out_dir}/speed_bench.{{json,md}} and speed_bench_rows.csv")
     return report

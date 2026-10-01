@@ -234,7 +234,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("demo", help="run every drafter on one prompt")
     p.add_argument("--workload", default="reasoning", choices=sorted(WORKLOADS))
     p.add_argument("-k", type=int, default=5)
-    p.add_argument("--seed", type=int, default=0)
+    # Many greedy toy prompts fall into a repetition loop where every drafter is perfect;
+    # seed 2 gives a prompt that separates the methods.
+    p.add_argument("--seed", type=int, default=2)
     p.set_defaults(func=cmd_demo)
 
     p = sub.add_parser("bench", help="SPEED-Bench-style sweep on the toy target")

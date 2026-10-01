@@ -1,0 +1,5 @@
+{
+  "method": "dflash",
+  "model": "RedHatAI/Qwen3-8B-speculator.dflash",
+  "num_speculative_tokens": 8
+}

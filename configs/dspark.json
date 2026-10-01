@@ -1,0 +1,5 @@
+{
+  "method": "dspark",
+  "model": "<your-dspark-speculator>",
+  "num_speculative_tokens": 8
+}

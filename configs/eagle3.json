@@ -1,0 +1,5 @@
+{
+  "method": "eagle3",
+  "model": "RedHatAI/Llama-3.1-8B-Instruct-speculator.eagle3",
+  "num_speculative_tokens": 3
+}
